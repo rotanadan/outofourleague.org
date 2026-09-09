@@ -1,0 +1,36 @@
+{
+  "name": "outofourleague-org",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck",
+    "dev:local": "npm run db:env && nuxt dev --dotenv .env.local",
+    "db:start": "supabase start && npm run db:env",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:push": "supabase db push",
+    "db:env": "bash scripts/local-env.sh",
+    "db:types": "supabase gen types typescript --local > app/types/database.types.ts"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.129",
+    "@iconify-json/simple-icons": "^1.2.94",
+    "@nuxt/ui": "^4.11.0",
+    "@nuxtjs/supabase": "^2.0.10",
+    "nuxt": "^4.5.2",
+    "stripe": "^22.6.1",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.17.0",
+    "eslint": "^10.10.0",
+    "supabase": "^2.117.0",
+    "typescript": "^6.0.3",
+    "vue-tsc": "^3.3.11"
+  }
+}
