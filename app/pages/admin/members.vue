@@ -38,8 +38,13 @@ const { data: teams } = await useAsyncData('admin-member-teams', async () => {
   return data ?? []
 }, { watch: [season], default: () => [] })
 
+// Taking a bowler off a team needs a real option in the list, and Reka UI
+// rejects an empty-string value (it reserves that for "cleared"), so the
+// no-team choice carries a sentinel. Team ids are uuids, so it can't collide.
+const UNASSIGNED = 'none'
+
 const teamItems = computed(() => [
-  { label: 'Unassigned', value: '' },
+  { label: 'Unassigned', value: UNASSIGNED },
   ...(teams.value ?? []).map(team => ({ label: team.name, value: team.id }))
 ])
 
@@ -52,7 +57,7 @@ const roleItems: { label: string, value: TeamRole }[] = [
 async function assignTeam(profileId: string, teamId: string) {
   if (!season.value) return
 
-  const { error } = teamId
+  const { error } = teamId && teamId !== UNASSIGNED
     ? await client.from('team_members').upsert(
         { season_id: season.value.id, profile_id: profileId, team_id: teamId },
         { onConflict: 'season_id,profile_id' }
@@ -153,7 +158,7 @@ useSeoMeta({ title: 'Members · admin' })
             </td>
             <td class="py-2 pr-4">
               <USelect
-                :model-value="row.teamId ?? ''"
+                :model-value="row.teamId ?? UNASSIGNED"
                 :items="teamItems"
                 value-key="value"
                 :disabled="!season"
