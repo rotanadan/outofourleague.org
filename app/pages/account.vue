@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Database, Payment } from '~/types/database.types'
+import type { Database, TeamMatchDue } from '~/types/database.types'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -51,45 +51,60 @@ const { data: membership } = await useAsyncData('my-team', async () => {
   return data
 }, { watch: [userId, season] })
 
-// Dues: every week of the season, paired with my payment for it (if any).
+// Dues: what my team owes for each of its matches. Anyone on the team can pay
+// any part of a match's balance.
 const { data: dues, refresh: refreshDues } = await useAsyncData('my-dues', async () => {
-  if (!userId.value || !season.value) return []
+  const teamId = membership.value?.team?.id
+  if (!teamId) return []
 
-  const [weeks, payments] = await Promise.all([
-    client.from('weeks').select('*').eq('season_id', season.value.id).order('week_number'),
-    client.from('payments').select('*').eq('profile_id', userId.value).eq('season_id', season.value.id)
-  ])
+  const { data } = await client
+    .from('team_match_dues')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('week_number')
 
-  const byWeek = new Map<string, Payment>()
-  for (const payment of payments.data ?? []) {
-    if (payment.week_id) byWeek.set(payment.week_id, payment)
-  }
+  return data ?? []
+}, { watch: [membership], default: () => [] })
 
-  return (weeks.data ?? []).map(week => ({ week, payment: byWeek.get(week.id) ?? null }))
-}, { watch: [userId, season], default: () => [] })
-
-const weeklyFee = computed(() => season.value?.league?.weekly_fee_cents ?? 0)
-const owed = computed(() =>
-  (dues.value ?? []).filter(row => row.payment?.status !== 'paid').length * weeklyFee.value
+const matchFee = computed(() => season.value?.league?.match_fee_cents ?? 0)
+const outstanding = computed(() =>
+  (dues.value ?? []).reduce((total, row) => total + row.remaining_cents, 0)
 )
 
-const payingWeek = ref<string | null>(null)
+// What's left once teammates' checkouts in progress are set aside: the most the
+// server will accept for this match right now.
+function payable(row: TeamMatchDue) {
+  return Math.max(row.remaining_cents - row.pending_cents, 0)
+}
 
-async function payWeek(weekId: string) {
-  payingWeek.value = weekId
+// Dollars typed into each match's pay field, starting at everything payable.
+const amounts = reactive<Record<string, number>>({})
+
+watchEffect(() => {
+  for (const row of dues.value ?? []) {
+    amounts[row.match_id] ??= payable(row) / 100
+  }
+})
+
+const payingMatch = ref<string | null>(null)
+
+async function payMatch(row: TeamMatchDue) {
+  payingMatch.value = row.match_id
   try {
     const { url } = await $fetch<{ url: string }>('/api/stripe/checkout', {
       method: 'POST',
-      body: { weekId }
+      body: { matchId: row.match_id, amountCents: Math.round((amounts[row.match_id] ?? 0) * 100) }
     })
     window.location.href = url
   } catch (error: unknown) {
-    const message = error && typeof error === 'object' && 'statusMessage' in error
-      ? String((error as { statusMessage: string }).statusMessage)
-      : 'Something went wrong.'
-    toast.add({ title: 'Could not start checkout', description: message, color: 'error' })
+    // Read the message from the JSON body: the HTTP status text is empty over
+    // HTTP/2 (e.g. on Vercel).
+    const message = (error as { data?: { statusMessage?: string } }).data?.statusMessage
+    toast.add({ title: 'Could not start checkout', description: message ?? 'Something went wrong.', color: 'error' })
+    // A teammate may have paid in the meantime, so show the current balance.
+    await refreshDues()
   } finally {
-    payingWeek.value = null
+    payingMatch.value = null
   }
 }
 
@@ -98,7 +113,11 @@ const route = useRoute()
 onMounted(async () => {
   if (route.query.paid) {
     await refreshDues()
-    toast.add({ title: 'Thanks — payment received', color: 'success' })
+    toast.add({
+      title: 'Thanks — payment received',
+      description: 'It can take a moment to show up against your team\'s balance.',
+      color: 'success'
+    })
   }
 })
 
@@ -180,62 +199,103 @@ useSeoMeta({ title: 'My account' })
         <template #header>
           <div class="flex items-baseline justify-between gap-4">
             <h2 class="font-semibold">
-              Weekly dues
+              Team dues
             </h2>
-            <p class="text-sm text-muted">
-              {{ formatMoney(weeklyFee) }} per week · {{ formatMoney(owed) }} outstanding
+            <p
+              v-if="membership?.team"
+              class="text-sm text-muted"
+            >
+              {{ formatMoney(matchFee) }} per match · {{ formatMoney(outstanding) }} outstanding
             </p>
           </div>
         </template>
 
         <p
-          v-if="!dues?.length"
+          v-if="!membership?.team"
           class="text-sm text-muted"
         >
-          No weeks scheduled yet.
+          You can pay dues once a league admin puts you on a team.
         </p>
 
-        <ul
-          v-else
-          class="divide-y divide-default"
+        <p
+          v-else-if="!dues?.length"
+          class="text-sm text-muted"
         >
-          <li
-            v-for="row in dues"
-            :key="row.week.id"
-            class="flex items-center justify-between gap-4 py-2 text-sm"
-          >
-            <div>
-              <span class="font-medium">Week {{ row.week.week_number }}</span>
-              <span class="ml-2 text-muted">{{ formatBowlDate(row.week.bowl_date) }}</span>
-            </div>
+          No matches scheduled for {{ membership.team.name }} yet.
+        </p>
 
-            <UBadge
-              v-if="row.payment?.status === 'paid'"
-              color="success"
-              variant="subtle"
+        <template v-else>
+          <p class="text-sm text-muted">
+            Each team owes {{ formatMoney(matchFee) }} per match. Anyone on
+            {{ membership.team.name }} can pay any part of what's left.
+          </p>
+
+          <ul class="mt-3 divide-y divide-default">
+            <li
+              v-for="row in dues"
+              :key="row.match_id"
+              class="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
             >
-              Paid
-            </UBadge>
-            <UBadge
-              v-else-if="row.payment?.status === 'pending'"
-              color="warning"
-              variant="subtle"
-            >
-              Pending
-            </UBadge>
-            <UButton
-              v-else
-              size="xs"
-              color="neutral"
-              variant="subtle"
-              :loading="payingWeek === row.week.id"
-              :disabled="!weeklyFee"
-              @click="payWeek(row.week.id)"
-            >
-              Pay {{ formatMoney(weeklyFee) }}
-            </UButton>
-          </li>
-        </ul>
+              <div>
+                <p>
+                  <span class="font-medium">Week {{ row.week_number }}</span>
+                  <span class="ml-2 text-muted">{{ formatBowlDate(row.bowl_date) }} · vs {{ row.opponent_name }}</span>
+                </p>
+                <p class="text-muted">
+                  {{ formatMoney(row.paid_cents) }} of {{ formatMoney(row.fee_cents) }} paid
+                  <span v-if="row.pending_cents">· {{ formatMoney(row.pending_cents) }} in progress</span>
+                </p>
+              </div>
+
+              <UBadge
+                v-if="!row.fee_cents"
+                color="neutral"
+                variant="subtle"
+              >
+                No dues
+              </UBadge>
+              <UBadge
+                v-else-if="!row.remaining_cents"
+                color="success"
+                variant="subtle"
+              >
+                Paid
+              </UBadge>
+              <form
+                v-else
+                class="flex items-center gap-2"
+                @submit.prevent="payMatch(row)"
+              >
+                <span class="font-medium text-highlighted">
+                  {{ formatMoney(row.remaining_cents) }} left
+                </span>
+                <UInput
+                  v-model.number="amounts[row.match_id]"
+                  type="number"
+                  min="0.5"
+                  :max="payable(row) / 100"
+                  step="0.01"
+                  required
+                  :disabled="!payable(row)"
+                  aria-label="Amount to pay"
+                  class="w-28"
+                >
+                  <template #leading>
+                    $
+                  </template>
+                </UInput>
+                <UButton
+                  type="submit"
+                  size="sm"
+                  :loading="payingMatch === row.match_id"
+                  :disabled="!payable(row)"
+                >
+                  Pay
+                </UButton>
+              </form>
+            </li>
+          </ul>
+        </template>
       </UCard>
     </div>
   </UContainer>

@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
       const paymentId = session.metadata?.payment_id ?? session.client_reference_id
       if (!paymentId) break
 
-      // Frees the week up for another attempt (see payments_one_settled_per_week).
+      // Releases this payment's hold on the team's balance (see team_match_dues).
       await db.from('payments').update({ status: 'failed' }).eq('id', paymentId)
       break
     }

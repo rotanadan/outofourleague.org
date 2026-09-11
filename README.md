@@ -113,15 +113,17 @@ After that, `/admin/members` can invite new bowlers and promote anyone else.
 | Table | What it holds |
 | --- | --- |
 | `profiles` | One row per signed-in bowler, mirroring `auth.users`. `role` is `admin` or `member`. |
-| `leagues` | The league itself: venue, bowling night, weekly fee. |
+| `leagues` | The league itself: venue, bowling night, and the fee each team owes per match. |
 | `seasons` | A run of weeks within a league. Exactly one can be active. |
 | `teams` | Teams, scoped to a season, with an optional captain. |
 | `team_members` | Roster spots. A bowler holds at most one per season. |
 | `weeks` | Numbered bowl dates in a season. |
 | `matches` | Matchups within a week, with lanes and points. A null `away_team_id` is a bye. |
-| `payments` | Weekly dues, including the Stripe session and intent ids. |
+| `payments` | Contributions toward a team's dues for a match — any number per team per match — with the Stripe session and intent ids. |
 
 `team_standings` is a view that totals points from completed matches.
+`team_match_dues` has one row per team per match: the fee, and what's paid, in
+progress and left.
 
 Row level security is on everywhere:
 
@@ -131,9 +133,10 @@ Row level security is on everywhere:
   Everyone edits their own row; only admins can change a member's role.
 - Admins can write everything. Captains can rename their own team and manage
   its roster.
-- Bowlers read only their own `payments`; only the server writes them.
+- Bowlers read their own `payments` and their team's; only the server writes
+  them. `team_match_dues` is for signed-in users only.
 
-## Stripe (weekly dues)
+## Stripe (team dues)
 
 Dues work once these are set in `.env`:
 
@@ -147,11 +150,20 @@ NUXT_SUPABASE_SECRET_KEY=...   # server-side writes to payments
 Without them the site runs normally and the pay buttons return a clear
 "not configured yet" error.
 
-The flow: `/account` posts a week to `POST /api/stripe/checkout`, which creates
-a pending `payments` row and a Stripe Checkout session, then redirects. Nothing
-is marked paid until `POST /api/stripe/webhook` receives
+Each team owes the league's match fee (set on `/admin`) for every match it
+plays; byes and cancelled matches are free. Anyone on the team can pay any part
+of what's left, and `/admin/teams` shows each team's status week by week.
+
+The flow: `/account` posts a match and an amount to `POST /api/stripe/checkout`.
+That calls `reserve_team_payment`, which checks the amount against the team's
+remaining balance and writes a pending `payments` row under a per-team,
+per-match lock, so teammates paying at the same moment can't overpay between
+them. Then it creates a Stripe Checkout session and redirects. A pending payment
+holds its share of the balance for 35 minutes (sessions expire after 30).
+
+Nothing is marked paid until `POST /api/stripe/webhook` receives
 `checkout.session.completed` — so a bowler closing the tab mid-payment can't
-mark themselves paid.
+mark their team paid.
 
 Testing the webhook locally:
 
@@ -171,10 +183,10 @@ Subscribe the production endpoint to `checkout.session.completed`,
 | `/teams`, `/teams/:id` | Rosters and a team's matches |
 | `/standings` | Points won and lost |
 | `/login`, `/confirm` | Email-link sign in |
-| `/account` | Profile, your team, dues |
+| `/account` | Profile, your team, and paying toward its match dues |
 | `/admin` | League and season setup |
 | `/admin/members` | Assign bowlers to teams, grant admin |
-| `/admin/teams` | Create teams, name captains |
+| `/admin/teams` | Create teams, name captains, see each team's dues week by week |
 | `/admin/schedule` | Weeks, matchups, results |
 
 ## Checks

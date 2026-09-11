@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Database } from '~/types/database.types'
+import type { Database, TeamMatchDue } from '~/types/database.types'
 
 definePageMeta({ middleware: 'admin' })
 
@@ -86,7 +86,11 @@ async function deleteTeam(id: string, name: string) {
 
   const { error } = await client.from('teams').delete().eq('id', id)
   if (error) {
-    toast.add({ title: 'Could not delete', description: error.message, color: 'error' })
+    // Payments pin their team, so a team that has paid anything stays.
+    const description = error.code === '23503'
+      ? `${name} has made payments, so it can't be deleted.`
+      : error.message
+    toast.add({ title: 'Could not delete', description, color: 'error' })
     return
   }
   await refresh()
@@ -98,6 +102,58 @@ function captainOptions(teamId: string) {
     label: member.profile?.full_name ?? 'Unnamed bowler',
     value: member.profile?.id as string
   }))
+}
+
+// Dues: one row per team per match, summarised per team for the cards.
+const { data: dues } = await useAsyncData('admin-team-dues', async () => {
+  if (!season.value) return []
+
+  const { data } = await client
+    .from('team_match_dues')
+    .select('*')
+    .eq('season_id', season.value.id)
+    .order('week_number')
+
+  return data ?? []
+}, { watch: [season], default: () => [] })
+
+const today = new Date().toISOString().slice(0, 10)
+
+type DuesSummary = { rows: TeamMatchDue[], paid: number, remaining: number, overdue: number }
+
+const duesByTeam = computed(() => {
+  const summaries = new Map<string, DuesSummary>()
+  for (const row of dues.value ?? []) {
+    const summary = summaries.get(row.team_id) ?? { rows: [], paid: 0, remaining: 0, overdue: 0 }
+    summary.rows.push(row)
+    summary.paid += row.paid_cents
+    summary.remaining += row.remaining_cents
+    // Still owing for a match that's already been bowled.
+    if (row.bowl_date < today) summary.overdue += row.remaining_cents
+    summaries.set(row.team_id, summary)
+  }
+  return summaries
+})
+
+function dueColor(row: TeamMatchDue): 'success' | 'warning' | 'error' | 'neutral' {
+  if (!row.fee_cents) return 'neutral'
+  if (!row.remaining_cents) return 'success'
+  if (row.bowl_date < today) return 'error'
+  return row.paid_cents ? 'warning' : 'neutral'
+}
+
+function dueLabel(row: TeamMatchDue) {
+  if (!row.fee_cents) return 'no dues'
+  if (!row.remaining_cents) return 'paid'
+  if (row.paid_cents) return `${formatMoney(row.paid_cents)} of ${formatMoney(row.fee_cents)}`
+  return 'unpaid'
+}
+
+function dueDetail(row: TeamMatchDue) {
+  const parts = [`${formatBowlDate(row.bowl_date)} vs ${row.opponent_name}`]
+  if (row.remaining_cents) parts.push(`${formatMoney(row.remaining_cents)} left`)
+  if (row.pending_cents) parts.push(`${formatMoney(row.pending_cents)} in progress`)
+  return parts.join(' · ')
 }
 
 useSeoMeta({ title: 'Teams · admin' })
@@ -208,6 +264,47 @@ useSeoMeta({ title: 'Teams · admin' })
               page.
             </li>
           </ul>
+
+          <template #footer>
+            <div class="flex items-baseline justify-between gap-2 text-sm">
+              <span class="font-medium">Dues</span>
+              <span class="text-muted">
+                {{ formatMoney(duesByTeam.get(team.id)?.paid) }} paid ·
+                {{ formatMoney(duesByTeam.get(team.id)?.remaining) }} outstanding
+              </span>
+            </div>
+
+            <p
+              v-if="duesByTeam.get(team.id)?.overdue"
+              class="mt-1 text-sm text-error"
+            >
+              {{ formatMoney(duesByTeam.get(team.id)?.overdue) }} overdue for matches already bowled
+            </p>
+
+            <ul
+              v-if="duesByTeam.get(team.id)?.rows.length"
+              class="mt-3 flex flex-wrap gap-1.5"
+            >
+              <li
+                v-for="row in duesByTeam.get(team.id)?.rows"
+                :key="row.match_id"
+              >
+                <UBadge
+                  :color="dueColor(row)"
+                  variant="subtle"
+                  :title="dueDetail(row)"
+                >
+                  Wk {{ row.week_number }} · {{ dueLabel(row) }}
+                </UBadge>
+              </li>
+            </ul>
+            <p
+              v-else
+              class="mt-2 text-sm text-muted"
+            >
+              No matches scheduled.
+            </p>
+          </template>
         </UCard>
       </div>
 

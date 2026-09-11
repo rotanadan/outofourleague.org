@@ -52,7 +52,7 @@ export interface Database {
           venue: string | null
           day_of_week: number | null
           start_time: string | null
-          weekly_fee_cents: number
+          match_fee_cents: number
           is_active: boolean
           created_at: string
           updated_at: string
@@ -65,7 +65,7 @@ export interface Database {
           venue?: string | null
           day_of_week?: number | null
           start_time?: string | null
-          weekly_fee_cents?: number
+          match_fee_cents?: number
           is_active?: boolean
         }
         Update: Partial<Database['public']['Tables']['leagues']['Insert']>
@@ -248,7 +248,8 @@ export interface Database {
           id: string
           profile_id: string
           season_id: string
-          week_id: string | null
+          team_id: string
+          match_id: string
           amount_cents: number
           currency: string
           status: PaymentStatus
@@ -262,7 +263,8 @@ export interface Database {
           id?: string
           profile_id: string
           season_id: string
-          week_id?: string | null
+          team_id: string
+          match_id: string
           amount_cents: number
           currency?: string
           status?: PaymentStatus
@@ -284,11 +286,17 @@ export interface Database {
           referencedRelation: 'seasons'
           referencedColumns: ['id']
         }, {
-          foreignKeyName: 'payments_week_id_fkey'
-          columns: ['week_id']
+          foreignKeyName: 'payments_team_fkey'
+          columns: ['team_id', 'season_id']
           isOneToOne: false
-          referencedRelation: 'weeks'
-          referencedColumns: ['id']
+          referencedRelation: 'teams'
+          referencedColumns: ['id', 'season_id']
+        }, {
+          foreignKeyName: 'payments_match_fkey'
+          columns: ['match_id', 'season_id']
+          isOneToOne: false
+          referencedRelation: 'matches'
+          referencedColumns: ['id', 'season_id']
         }]
       }
     }
@@ -304,6 +312,24 @@ export interface Database {
         }
         Relationships: []
       }
+      team_match_dues: {
+        Row: {
+          match_id: string
+          season_id: string
+          week_id: string
+          week_number: number
+          bowl_date: string
+          team_id: string
+          team_name: string
+          opponent_team_id: string
+          opponent_name: string
+          fee_cents: number
+          paid_cents: number
+          pending_cents: number
+          remaining_cents: number
+        }
+        Relationships: []
+      }
     }
     Functions: {
       is_admin: {
@@ -313,6 +339,10 @@ export interface Database {
       is_captain_of: {
         Args: { p_team_id: string }
         Returns: boolean
+      }
+      reserve_team_payment: {
+        Args: { p_profile_id: string, p_match_id: string, p_amount_cents: number }
+        Returns: Database['public']['Tables']['payments']['Row']
       }
     }
     Enums: {
@@ -337,3 +367,4 @@ export type Week = Tables<'weeks'>
 export type Match = Tables<'matches'>
 export type Payment = Tables<'payments'>
 export type TeamStanding = Database['public']['Views']['team_standings']['Row']
+export type TeamMatchDue = Database['public']['Views']['team_match_dues']['Row']

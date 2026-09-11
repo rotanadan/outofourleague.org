@@ -111,8 +111,8 @@ const meetingTime = computed(() => {
           <UPageCard
             to="/account"
             icon="i-lucide-wallet"
-            :title="league?.weekly_fee_cents ? `Weekly dues — ${formatMoney(league.weekly_fee_cents)}` : 'Weekly dues'"
-            description="Check what you owe and pay online."
+            :title="league?.match_fee_cents ? `Team dues — ${formatMoney(league.match_fee_cents)} per match` : 'Team dues'"
+            description="See what your team owes and chip in online."
             variant="subtle"
           />
         </div>

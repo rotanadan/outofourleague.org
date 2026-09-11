@@ -22,7 +22,7 @@ const leagueForm = reactive({
   venue: '',
   day_of_week: 4,
   start_time: '19:00',
-  weekly_fee_dollars: 25,
+  match_fee_dollars: 60,
   description: ''
 })
 
@@ -32,7 +32,7 @@ watchEffect(() => {
   leagueForm.venue = league.value.venue ?? ''
   leagueForm.day_of_week = league.value.day_of_week ?? 4
   leagueForm.start_time = league.value.start_time?.slice(0, 5) ?? '19:00'
-  leagueForm.weekly_fee_dollars = league.value.weekly_fee_cents / 100
+  leagueForm.match_fee_dollars = league.value.match_fee_cents / 100
   leagueForm.description = league.value.description ?? ''
 })
 
@@ -60,7 +60,7 @@ async function saveLeague() {
     venue: leagueForm.venue || null,
     day_of_week: leagueForm.day_of_week,
     start_time: leagueForm.start_time || null,
-    weekly_fee_cents: Math.round(leagueForm.weekly_fee_dollars * 100),
+    match_fee_cents: Math.round(leagueForm.match_fee_dollars * 100),
     description: leagueForm.description || null
   }
 
@@ -213,9 +213,9 @@ useSeoMeta({ title: 'League admin' })
               />
             </UFormField>
 
-            <UFormField label="Weekly fee ($)">
+            <UFormField label="Match fee per team ($)">
               <UInput
-                v-model.number="leagueForm.weekly_fee_dollars"
+                v-model.number="leagueForm.match_fee_dollars"
                 type="number"
                 min="0"
                 step="0.5"

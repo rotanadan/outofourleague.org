@@ -20,6 +20,10 @@ const teamItems = computed(() =>
   (teams.value ?? []).map(team => ({ label: team.name, value: team.id }))
 )
 
+// Payments pin the match (and so the week) they were made for, so those can't
+// be deleted once a team has paid anything toward them.
+const HAS_PAYMENTS = { message: 'A team has made payments toward it, so it can\'t be deleted.' }
+
 function fail(title: string, error: { message: string }) {
   toast.add({ title, description: error.message, color: 'error' })
 }
@@ -54,7 +58,7 @@ async function deleteWeek(id: string, weekNumber: number) {
   if (!confirm(`Delete week ${weekNumber} and its matchups?`)) return
 
   const { error } = await client.from('weeks').delete().eq('id', id)
-  if (error) return fail('Could not delete the week', error)
+  if (error) return fail('Could not delete the week', error.code === '23503' ? HAS_PAYMENTS : error)
   await refresh()
 }
 
@@ -98,7 +102,7 @@ async function saveResult(matchId: string, home: number, away: number) {
 
 async function deleteMatch(matchId: string) {
   const { error } = await client.from('matches').delete().eq('id', matchId)
-  if (error) return fail('Could not delete the matchup', error)
+  if (error) return fail('Could not delete the matchup', error.code === '23503' ? HAS_PAYMENTS : error)
   await refresh()
 }
 

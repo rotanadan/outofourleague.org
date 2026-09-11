@@ -2,7 +2,7 @@
 -- Creates one league, one active season, eight teams, and a full round-robin
 -- schedule. No profiles: those come from real signups.
 
-insert into public.leagues (name, slug, description, venue, day_of_week, start_time, weekly_fee_cents)
+insert into public.leagues (name, slug, description, venue, day_of_week, start_time, match_fee_cents)
 values (
   'Out of Our League',
   'out-of-our-league',
@@ -10,7 +10,7 @@ values (
   'Sunset Lanes',
   6,
   '19:00',
-  2500
+  6000
 );
 
 insert into public.seasons (league_id, name, starts_on, ends_on, is_active)
