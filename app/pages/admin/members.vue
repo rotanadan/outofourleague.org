@@ -99,6 +99,35 @@ async function setAdmin(profileId: string, isAdmin: boolean) {
   await refresh()
 }
 
+// Invites: accounts are invite-only, so this is how bowlers get in.
+const invite = reactive({ email: '', fullName: '' })
+const inviting = ref(false)
+
+async function sendInvite() {
+  if (!invite.email) return
+
+  inviting.value = true
+  try {
+    await $fetch('/api/admin/invite', {
+      method: 'POST',
+      body: { email: invite.email, fullName: invite.fullName }
+    })
+  } catch (error: unknown) {
+    // Read the message from the JSON body: the HTTP status text that
+    // `statusMessage` also lands in is empty over HTTP/2 (e.g. on Vercel).
+    const message = (error as { data?: { statusMessage?: string } }).data?.statusMessage
+    toast.add({ title: 'Could not send the invite', description: message ?? 'Something went wrong.', color: 'error' })
+    return
+  } finally {
+    inviting.value = false
+  }
+
+  toast.add({ title: `Invite sent to ${invite.email}`, color: 'success' })
+  invite.email = ''
+  invite.fullName = ''
+  await refresh()
+}
+
 useSeoMeta({ title: 'Members · admin' })
 </script>
 
@@ -120,8 +149,43 @@ useSeoMeta({ title: 'Members · admin' })
       </template>
     </UPageHeader>
 
-    <p class="mt-4 text-sm text-muted">
-      Members appear here after they sign in for the first time.
+    <form
+      class="mt-6 flex flex-wrap items-end gap-3"
+      @submit.prevent="sendInvite"
+    >
+      <UFormField
+        label="Email"
+        required
+      >
+        <UInput
+          v-model="invite.email"
+          type="email"
+          placeholder="bowler@example.com"
+          class="w-64"
+          required
+        />
+      </UFormField>
+
+      <UFormField label="Name">
+        <UInput
+          v-model="invite.fullName"
+          placeholder="Optional"
+          class="w-48"
+        />
+      </UFormField>
+
+      <UButton
+        type="submit"
+        icon="i-lucide-send"
+        :loading="inviting"
+      >
+        Send invite
+      </UButton>
+    </form>
+
+    <p class="mt-3 text-sm text-muted">
+      Accounts are invite-only. Invited bowlers show up below straight away, so
+      you can put them on a team before they accept.
     </p>
 
     <div class="mt-6 overflow-x-auto">

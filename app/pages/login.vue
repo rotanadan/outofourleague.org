@@ -21,10 +21,21 @@ async function sendLink() {
   const { error } = await client.auth.signInWithOtp({
     email: email.value,
     options: {
+      // Accounts are invite-only; never create one from the sign-in form.
+      shouldCreateUser: false,
       emailRedirectTo: `${window.location.origin}/confirm?redirect=${encodeURIComponent(redirectTo.value)}`
     }
   })
   loading.value = false
+
+  if (error?.code === 'otp_disabled' || error?.code === 'signup_disabled') {
+    toast.add({
+      title: 'No account for that email',
+      description: 'Accounts are invite-only — ask a league admin to send you an invite.',
+      color: 'error'
+    })
+    return
+  }
 
   if (error) {
     toast.add({ title: 'Could not send the link', description: error.message, color: 'error' })
@@ -45,7 +56,8 @@ useSeoMeta({ title: 'Sign in' })
           Sign in
         </h1>
         <p class="mt-1 text-sm text-muted">
-          We'll email you a link — no password to remember.
+          We'll email you a link — no password to remember. Accounts are by
+          invitation from a league admin.
         </p>
       </template>
 

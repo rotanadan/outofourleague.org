@@ -50,9 +50,10 @@ npm run db:reset       # wipe and re-apply migrations + seed
 npm run db:stop        # stop the containers
 ```
 
-Sign in at `/login` with any address, open the link from the test inbox, then
-make yourself an admin (see below) — the seed data deliberately contains no
-profiles, since those come from `auth.users`.
+Accounts are invite-only, and the seed data deliberately contains no users —
+profiles come from `auth.users`. Create the first account from Studio (see
+[Making yourself an admin](#making-yourself-an-admin)); after that, admins
+invite everyone else from `/admin/members`.
 
 ### Deploying against hosted Supabase
 
@@ -66,9 +67,16 @@ npm run db:push        # applies supabase/migrations
 npm run dev            # uses .env
 ```
 
-In the dashboard under **Authentication → URL configuration**, add
-`<site-url>/confirm` as a redirect URL — the same thing `supabase/config.toml`
-does for local.
+`supabase/config.toml` only configures the local stack, so mirror its auth
+settings in the dashboard:
+
+- **Authentication → URL configuration**: set the site URL, and add
+  `<site-url>/confirm` as a redirect URL.
+- **Authentication → Sign In / Providers**: turn off **Allow new users to sign
+  up**. Accounts are invite-only; leaving this on lets anyone create one.
+- **Authentication → Email Templates → Invite user**: paste in
+  `supabase/templates/invite.html`. The default template's link can't sign an
+  invited bowler in — see the comment in that file.
 
 After changing the schema, regenerate the client types so queries stay typed:
 
@@ -78,10 +86,14 @@ npm run db:types
 
 ### Making yourself an admin
 
-Auth is a passwordless email link. A profile row is created automatically the
-first time someone signs in, and everyone starts as `member` — a database
-trigger stops members from promoting themselves, so the first admin has to be
-promoted out of band:
+Auth is a passwordless email link, and public sign-up is off, so the very first
+account has to come from Studio (local: http://127.0.0.1:54423; hosted: the
+dashboard): **Authentication → Users → Add user → Send invitation**. Locally the
+invite lands in the test inbox; follow its link to sign in.
+
+A profile row is created as soon as someone is invited, and everyone starts as
+`member` — a database trigger stops members from promoting themselves, so the
+first admin has to be promoted out of band:
 
 ```sql
 update public.profiles set role = 'admin' where email = 'you@example.com';
@@ -94,7 +106,7 @@ psql postgresql://postgres:postgres@127.0.0.1:54422/postgres \
   -c "update public.profiles set role = 'admin' where email = 'you@example.com';"
 ```
 
-After that, `/admin/members` can promote anyone else.
+After that, `/admin/members` can invite new bowlers and promote anyone else.
 
 ## How the data is laid out
 

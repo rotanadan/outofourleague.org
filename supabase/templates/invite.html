@@ -1,0 +1,11 @@
+<h2>You're invited to Out of Our League</h2>
+
+<p>A league admin has set up an account for you. Follow the link to sign in — there's no password to remember.</p>
+
+<!--
+  Links straight to the app with a token hash rather than {{ .ConfirmationURL }}:
+  invites are created server-side, so the browser has no PKCE verifier, and the
+  PKCE-mode Supabase client rejects the #access_token redirect the default link
+  produces. /confirm redeems the hash with verifyOtp instead.
+-->
+<p><a href="{{ .SiteURL }}/confirm?token_hash={{ .TokenHash }}&type=invite">Accept the invite</a></p>
