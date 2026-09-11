@@ -5,6 +5,7 @@ definePageMeta({ middleware: 'auth' })
 
 const client = useSupabaseClient<Database>()
 const user = useSupabaseUser()
+const userId = useUserId()
 const toast = useToast()
 const { profile, refresh: refreshProfile } = useProfile()
 const { data: season } = await useActiveSeason()
@@ -18,13 +19,13 @@ watchEffect(() => {
 })
 
 async function saveProfile() {
-  if (!user.value) return
+  if (!userId.value) return
 
   saving.value = true
   const { error } = await client
     .from('profiles')
     .update({ full_name: form.full_name || null, phone: form.phone || null })
-    .eq('id', user.value.id)
+    .eq('id', userId.value)
   saving.value = false
 
   if (error) {
@@ -38,25 +39,25 @@ async function saveProfile() {
 
 // Which team am I on this season?
 const { data: membership } = await useAsyncData('my-team', async () => {
-  if (!user.value || !season.value) return null
+  if (!userId.value || !season.value) return null
 
   const { data } = await client
     .from('team_members')
     .select('role, team:teams(id, name)')
-    .eq('profile_id', user.value.id)
+    .eq('profile_id', userId.value)
     .eq('season_id', season.value.id)
     .maybeSingle()
 
   return data
-}, { watch: [user, season] })
+}, { watch: [userId, season] })
 
 // Dues: every week of the season, paired with my payment for it (if any).
 const { data: dues, refresh: refreshDues } = await useAsyncData('my-dues', async () => {
-  if (!user.value || !season.value) return []
+  if (!userId.value || !season.value) return []
 
   const [weeks, payments] = await Promise.all([
     client.from('weeks').select('*').eq('season_id', season.value.id).order('week_number'),
-    client.from('payments').select('*').eq('profile_id', user.value.id).eq('season_id', season.value.id)
+    client.from('payments').select('*').eq('profile_id', userId.value).eq('season_id', season.value.id)
   ])
 
   const byWeek = new Map<string, Payment>()
@@ -65,7 +66,7 @@ const { data: dues, refresh: refreshDues } = await useAsyncData('my-dues', async
   }
 
   return (weeks.data ?? []).map(week => ({ week, payment: byWeek.get(week.id) ?? null }))
-}, { watch: [user, season], default: () => [] })
+}, { watch: [userId, season], default: () => [] })
 
 const weeklyFee = computed(() => season.value?.league?.weekly_fee_cents ?? 0)
 const owed = computed(() =>

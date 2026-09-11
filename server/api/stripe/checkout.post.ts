@@ -16,8 +16,10 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // `serverSupabaseUser` returns JWT claims, so the bowler's id is `sub`.
   const user = await serverSupabaseUser(event)
-  if (!user) {
+  const profileId = user?.sub
+  if (!profileId) {
     throw createError({ statusCode: 401, statusMessage: 'Sign in first.' })
   }
 
@@ -47,7 +49,7 @@ export default defineEventHandler(async (event) => {
   const { data: existing } = await db
     .from('payments')
     .select('id, status')
-    .eq('profile_id', user.id)
+    .eq('profile_id', profileId)
     .eq('week_id', week.id)
     .in('status', ['pending', 'paid'])
     .maybeSingle()
@@ -62,7 +64,7 @@ export default defineEventHandler(async (event) => {
     const { data: created, error } = await db
       .from('payments')
       .insert({
-        profile_id: user.id,
+        profile_id: profileId,
         season_id: week.season_id,
         week_id: week.id,
         amount_cents: amountCents
