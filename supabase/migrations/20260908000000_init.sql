@@ -221,6 +221,13 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- Only an admin may change someone's role — including their own.
+--
+-- The check is skipped when there is no JWT, i.e. a direct connection: Studio,
+-- psql, or the service role. Those bypass row level security anyway, and the
+-- first admin has to be promoted from one of them — with no admin yet,
+-- `is_admin()` is false for everybody and the role would be unreachable.
+-- Anonymous PostgREST requests stay blocked either way: every write policy on
+-- `profiles` is `to authenticated`.
 create or replace function public.guard_profile_role()
 returns trigger
 language plpgsql
@@ -228,7 +235,9 @@ security definer
 set search_path = public
 as $$
 begin
-  if new.role is distinct from old.role and not public.is_admin() then
+  if new.role is distinct from old.role
+    and auth.uid() is not null
+    and not public.is_admin() then
     raise exception 'only admins may change a member role';
   end if;
   return new;
