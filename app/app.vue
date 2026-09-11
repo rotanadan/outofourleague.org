@@ -51,17 +51,17 @@ async function signOut() {
 <template>
   <UApp>
     <UHeader :ui="{ center: 'hidden' }">
+      <!-- UHeader already wraps this slot in a link to `to` (default "/"), so
+           another link here would nest <a> inside <a> — invalid HTML the
+           browser re-parents, breaking hydration on every page. -->
       <template #title>
-        <NuxtLink
-          to="/"
-          class="flex items-center gap-2 font-bold"
-        >
+        <span class="flex items-center gap-2">
           <UIcon
             name="i-lucide-circle-dot"
             class="size-6 text-primary"
           />
           <span>Out of Our League</span>
-        </NuxtLink>
+        </span>
       </template>
 
       <UNavigationMenu :items="links" />
