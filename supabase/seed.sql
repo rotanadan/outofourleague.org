@@ -21,14 +21,14 @@ insert into public.teams (season_id, name)
 select s.id, t.name
 from public.seasons s
 cross join (values
-  ('Gutter Guys'),
-  ('Pin Pals'),
-  ('Split Happens'),
-  ('Bowl Movements'),
-  ('Alley Cats'),
-  ('Spare Me'),
   ('Turkey Hunters'),
-  ('Lane Violation')
+  ('2 Girls With Balls'),
+  ('Pin Pals'),
+  ('Strikes R Us'),
+  ('4 Balls 2 Racks'),
+  ('Spared Splitless'),
+  ('Wii Bowling 4 Reals'),
+  ('Lickity Splits')
 ) as t(name)
 where s.name = 'Fall 2026';
 
